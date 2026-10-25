@@ -5,6 +5,8 @@ into `## <version> — <date>` when it publishes a release and uses it as the re
 
 ## Unreleased
 
+## 0.1.0 — 2026-10-25
+
 First release.
 
 - Master-password vault (Argon2id + AES-256-GCM), auto-lock, OS keychain / Touch ID unlock.
