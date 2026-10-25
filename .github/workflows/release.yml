@@ -1,10 +1,14 @@
 name: Release
 
 # One-click release from main: Actions → Release → Run workflow.
-#   1. prepare  – resolve the version, date the CHANGELOG, commit to main if anything changed
+#   1. prepare  – resolve the version and date the CHANGELOG; any resulting commit goes to a temporary
+#                 release-staging/v<version> branch, NOT to main
 #   2. build    – macOS / Windows / Linux installers from that exact commit
-#   3. publish  – create the tag + a published GitHub Release with all installers (only after every build succeeded)
-#   4. bump     – move main to the next development version
+#   3. publish  – only after every build succeeded: create the tag + published GitHub Release, then bring
+#                 main up to date with the release commit
+#   4. bump     – only after a successful publish: move main to the next development version
+#   5. cleanup  – always: delete the temporary staging branch
+# If anything fails before the release is published, main is left exactly as it was (no version change).
 # Pushes made with GITHUB_TOKEN do not trigger other workflows, so the release commits cannot loop.
 
 on:
@@ -53,6 +57,7 @@ jobs:
       sha: ${{ steps.version.outputs.sha }}
       prerelease: ${{ steps.version.outputs.prerelease }}
       matrix: ${{ steps.platforms.outputs.matrix }}
+      staging: ${{ steps.version.outputs.staging }}
     steps:
       - name: Selected platforms
         id: platforms
@@ -95,13 +100,17 @@ jobs:
             exit 1
           fi
           node scripts/release-version.mjs changelog-release "$version" "$(date -u +%F)"
+          staging=""
           if ! git diff --quiet; then
             git commit -am "chore(release): v${version} [skip ci]"
-            git push origin HEAD:main
+            # Not main: main only changes once the release has actually been published.
+            staging="release-staging/v${version}"
+            git push --force origin "HEAD:refs/heads/${staging}"
           fi
           {
             echo "version=${version}"
             echo "sha=$(git rev-parse HEAD)"
+            echo "staging=${staging}"
             echo "prerelease=$(node scripts/release-version.mjs is-prerelease "$version")"
           } >> "$GITHUB_OUTPUT"
           echo "Releasing **v${version}** from \`$(git rev-parse --short HEAD)\`" >> "$GITHUB_STEP_SUMMARY"
@@ -109,7 +118,8 @@ jobs:
   build:
     needs: prepare
     strategy:
-      fail-fast: true
+      # Let every selected platform finish so one run shows all problems; publish still needs all of them.
+      fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -125,8 +135,21 @@ jobs:
       - run: pnpm turbo run typecheck test build
       - name: Package installers
         working-directory: apps/desktop
-        run: pnpm exec electron-builder ${{ matrix.target }} --publish never
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Secrets that are not configured arrive as empty strings. electron-builder treats an empty CSC_LINK
+          # as a certificate path and fails ("<project> not a file"), so drop empty values entirely.
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!v:-}" ]; then unset "$v"; fi
+          done
+          if [ -z "${CSC_LINK:-}" ]; then
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            echo "::notice::No signing certificate configured (CSC_LINK); building unsigned installers."
+          fi
+          pnpm exec electron-builder "$TARGET" --publish never
         env:
+          TARGET: ${{ matrix.target }}
           # Optional code signing / notarization: leave these secrets unset for unsigned builds.
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -152,6 +175,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -188,9 +212,27 @@ jobs:
             echo "| --- | --- |"
             for f in dist/*; do echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"; done
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Update main with the release commit
+        if: needs.prepare.outputs.staging != ''
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if git merge-base --is-ancestor origin/main "$SHA"; then
+            git push origin "${SHA}:refs/heads/main"   # fast-forward: main has not moved
+          else
+            # main moved while the installers were building: merge the release commit in.
+            git checkout -B main origin/main
+            git merge --no-edit -m "chore(release): merge v${VERSION} into main [skip ci]" "$SHA"
+            git push origin HEAD:main
+          fi
 
   bump:
     needs: [prepare, publish]
+    # Never move main to the next version unless the release was really published.
+    if: needs.publish.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -211,3 +253,17 @@ jobs:
           # main may have moved while the installers were building.
           git push origin HEAD:main || { git pull --rebase origin main && git push origin HEAD:main; }
           echo "main is now at **v${next}**" >> "$GITHUB_STEP_SUMMARY"
+
+  cleanup:
+    needs: [prepare, build, publish, bump]
+    if: always() && needs.prepare.outputs.staging != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the temporary release-staging branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING: ${{ needs.prepare.outputs.staging }}
+        run: |
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${STAGING}" \
+            && echo "Deleted ${STAGING}" \
+            || echo "::warning::Could not delete ${STAGING}; delete it by hand."

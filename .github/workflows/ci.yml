@@ -6,6 +6,26 @@ on:
   pull_request:
 
 jobs:
+  # Unit tests and typecheck on every OS the app ships for (path handling, line endings, Windows quirks …).
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run typecheck test
+      - name: Release tooling tests
+        run: pnpm test:scripts
+
+  # Full check on Linux: lint, build, integration (registry:2 + Docker) and E2E.
   check:
     runs-on: ubuntu-latest
     steps:

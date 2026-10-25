@@ -95,15 +95,18 @@ certificates installed.
 2. On GitHub, open **Actions → Release → Run workflow**, keep the branch on **main**, and choose:
    - **Version to release.** Leave it empty to release the version currently in
      `apps/desktop/package.json`, or type an exact version (`1.2.0`, `1.3.0-beta.1`).
+   - **macOS / Windows / Linux:** which installers to build and attach (all ticked by default; at least one
+     is required). For example, untick Windows and Linux for a macOS-only release.
    - **Version bump applied to main after the release:** `patch` (default), `minor` or `major`.
 3. The workflow then runs four jobs:
 
-| Job       | What it does                                                                                                                                                                                                                                                                                                                 |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prepare` | Refuses to run off `main`, or if the tag `v<version>` already exists. Writes an explicit version into `apps/desktop`, `packages/core` and `packages/shared`, turns `## Unreleased` into `## <version> — <date>`, and commits `chore(release): v<version>` to `main` when anything changed.                                   |
-| `build`   | Builds on macOS, Windows and Ubuntu from that exact commit (typecheck + unit tests + build + electron-builder).                                                                                                                                                                                                              |
-| `publish` | Only after **all** platforms succeeded: creates the tag and a **published** GitHub Release titled _Helix-X Docker Client v<version>_. It attaches every installer, with the CHANGELOG section followed by GitHub's generated notes. Versions with a suffix (`-beta.1`) are marked as pre-releases; others become **Latest**. |
-| `bump`    | Moves `main` to the next version (`0.1.0` → `0.1.1` for `patch`) and commits `chore: start v<next> development`.                                                                                                                                                                                                             |
+| Job       | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `prepare` | Refuses to run off `main`, or if the tag `v<version>` already exists. Writes an explicit version into `apps/desktop`, `packages/core` and `packages/shared`, and turns `## Unreleased` into `## <version> — <date>`. Any resulting commit is pushed to a temporary `release-staging/v<version>` branch, **not** to `main`.                                                                                                                                   |
+| `build`   | Builds the selected platforms from that exact commit (typecheck + unit tests + build + electron-builder).                                                                                                                                                                                                                                                                                                                                                    |
+| `publish` | Only after **all** selected platforms succeeded: creates the tag and a **published** GitHub Release titled _Helix-X Docker Client v<version>_. It attaches every installer, with the CHANGELOG section followed by GitHub's generated notes. Versions with a suffix (`-beta.1`) are marked as pre-releases; others become **Latest**. Then it brings `main` up to date with the release commit: a fast-forward, or a merge if `main` moved during the build. |
+| `bump`    | Only after a successful `publish`: moves `main` to the next version (`0.1.0` → `0.1.1` for `patch`) and commits `chore: start v<next> development`.                                                                                                                                                                                                                                                                                                          |
+| `cleanup` | Always runs: deletes the temporary `release-staging/…` branch.                                                                                                                                                                                                                                                                                                                                                                                               |
 
 The installers are then on the repository's **Releases** page:
 
@@ -119,8 +122,16 @@ Notes:
   other workflows, so they can't loop, and they carry `[skip ci]` as well. This requires `main` to accept
   pushes from GitHub Actions. If you later protect `main`, allow the `github-actions` app to bypass the rule,
   or switch the workflow to a GitHub App token.
-- **If a build fails, no tag or release is created.** Fix the problem and run the workflow again with the
-  same inputs. Any `chore(release)` commit from the failed run is already on `main` and is simply reused.
+- Without signing secrets, the installers are built **unsigned**: the run shows a notice and
+  electron-builder skips signing. To sign, add `CSC_LINK` / `CSC_KEY_PASSWORD` (and `APPLE_ID`,
+  `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` for notarization) as repository secrets.
+- Every selected platform builds to completion even if another one fails, so a single run shows all problems.
+- **If any step before the release is published fails, `main` is not changed at all.** That covers a
+  failed build, a failed upload and a refused version. There is no version change, no dated CHANGELOG
+  and no tag. Fix the problem and run the workflow again with the same inputs.
+- If the release was published but updating `main` fails (rare, e.g. a merge conflict in `CHANGELOG.md`),
+  `bump` is skipped. Merge `release-staging/v<version>` into `main` by hand, then run
+  `pnpm release:version set <next>` and commit.
 - **If `bump` fails** after a successful release, set the next version by hand:
   `pnpm release:version set <next>`, commit, then push.
 - The helper can also be used locally:

@@ -151,7 +151,10 @@ function main(argv) {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Run as a CLI only when executed directly (not when imported by the tests). Windows paths compare
+// case-insensitively (drive letters may differ in case).
+const samePath = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b)
+if (process.argv[1] && samePath(resolve(process.argv[1]), fileURLToPath(import.meta.url))) {
   try {
     const out = main(process.argv.slice(2))
     if (out !== undefined && out !== '') process.stdout.write(`${out}\n`)
