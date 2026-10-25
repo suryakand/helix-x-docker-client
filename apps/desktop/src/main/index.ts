@@ -3,7 +3,7 @@ import log from 'electron-log/main'
 import { AppContext, broadcast } from './context'
 import { registerIpc } from './ipc/handlers'
 import { buildMenu } from './menu'
-import { createMainWindow } from './window'
+import { createMainWindow, ICON_PATH } from './window'
 
 // Isolated profile for automated tests / multiple profiles: HELIX_USER_DATA=/some/dir
 if (process.env.HELIX_USER_DATA) app.setPath('userData', process.env.HELIX_USER_DATA)
@@ -33,6 +33,12 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     app.setAppUserModelId('io.helixx.dockerclient')
+    // In dev the process runs from the stock Electron.app, so its icon would show in the Dock,
+    // app switcher and About panel. Packaged builds get the icon from the bundle.
+    if (process.platform === 'darwin' && !app.isPackaged) {
+      app.dock?.setIcon(ICON_PATH)
+      app.setAboutPanelOptions({ applicationName: 'Helix-X Docker Client', iconPath: ICON_PATH })
+    }
     const prod = app.isPackaged || !process.env.ELECTRON_RENDERER_URL
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       const csp = prod

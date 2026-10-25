@@ -35,6 +35,10 @@ therefore invalidates the cached `typecheck` / `build` / `test` of every package
 | `./scripts/build.sh [mac\|win\|linux\|all\|dir] [--skip-tests] [--arch x64\|arm64\|universal]` | Full pipeline: clean → `pnpm install --frozen-lockfile` → icons → turbo typecheck/lint/test/build → electron-builder                                                               |
 | `scripts\build.ps1 [-Target win\|dir] [-SkipTests] [-Arch x64\|arm64]`                         | The same pipeline on Windows (PowerShell)                                                                                                                                          |
 
+On macOS, `pnpm dev` and `pnpm start` first run `apps/desktop/scripts/patch-electron-dev.mjs`. It renames the local dev
+`Electron.app` to the product name and gives it the app icon, so the menu bar and Dock match the packaged app.
+Reinstalling `electron` undoes the patch, and the next run applies it again.
+
 To work on a single package, use a filter: `pnpm --filter @helix/core test`, or
 `pnpm turbo run typecheck --filter=@helix/desktop...` to include its dependencies.
 
@@ -76,20 +80,54 @@ certificates installed.
 
 ## CI/CD (GitHub Actions)
 
-- **`.github/workflows/ci.yml`** runs on pushes and pull requests. It sets up pnpm through
-  `pnpm/action-setup` and restores the Turbo cache, then runs `pnpm turbo run typecheck lint test build`,
-  the integration tests, and E2E (under `xvfb`).
-- **`.github/workflows/release.yml`** runs when you push a tag `v*`. It builds on `macos-latest`,
-  `windows-latest` and `ubuntu-latest`, uploads the binaries as workflow artifacts, and attaches them
-  to a **draft** GitHub Release. Add the signing secrets above to sign.
+- **`.github/workflows/ci.yml`** runs on pushes to `main` and on pull requests. It sets up pnpm through
+  `pnpm/action-setup` and restores the Turbo cache. Then it runs, in order:
+  - `pnpm turbo run typecheck lint test build`
+  - the release-tooling tests
+  - the integration tests
+  - E2E (under `xvfb`)
+- **`.github/workflows/release.yml`** builds the installers and publishes a downloadable GitHub
+  Release. It runs only when started by hand.
 
-To release:
+### Releasing
 
-```bash
-pnpm --filter @helix/desktop exec npm pkg set version=0.2.0   # the app version lives in apps/desktop/package.json
-git commit -am "Release 0.2.0" && git tag v0.2.0
-git push --follow-tags
-```
+1. Add your changes under `## Unreleased` in `CHANGELOG.md` (merged to `main` like any other change).
+2. On GitHub, open **Actions → Release → Run workflow**, keep the branch on **main**, and choose:
+   - **Version to release.** Leave it empty to release the version currently in
+     `apps/desktop/package.json`, or type an exact version (`1.2.0`, `1.3.0-beta.1`).
+   - **Version bump applied to main after the release:** `patch` (default), `minor` or `major`.
+3. The workflow then runs four jobs:
+
+| Job       | What it does                                                                                                                                                                                                                                                                                                                 |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prepare` | Refuses to run off `main`, or if the tag `v<version>` already exists. Writes an explicit version into `apps/desktop`, `packages/core` and `packages/shared`, turns `## Unreleased` into `## <version> — <date>`, and commits `chore(release): v<version>` to `main` when anything changed.                                   |
+| `build`   | Builds on macOS, Windows and Ubuntu from that exact commit (typecheck + unit tests + build + electron-builder).                                                                                                                                                                                                              |
+| `publish` | Only after **all** platforms succeeded: creates the tag and a **published** GitHub Release titled _Helix-X Docker Client v<version>_. It attaches every installer, with the CHANGELOG section followed by GitHub's generated notes. Versions with a suffix (`-beta.1`) are marked as pre-releases; others become **Latest**. |
+| `bump`    | Moves `main` to the next version (`0.1.0` → `0.1.1` for `patch`) and commits `chore: start v<next> development`.                                                                                                                                                                                                             |
+
+The installers are then on the repository's **Releases** page:
+
+- macOS arm64 + x64 `.dmg` / `.zip`
+- Windows x64/arm64 setup `.exe` and x64 portable `.exe`
+- Linux `.AppImage`, `.deb` and `.tar.gz`
+
+Each run's summary links to the release and lists the files.
+
+Notes:
+
+- The release commits are made with the workflow's `GITHUB_TOKEN`. Pushes made with that token don't start
+  other workflows, so they can't loop, and they carry `[skip ci]` as well. This requires `main` to accept
+  pushes from GitHub Actions. If you later protect `main`, allow the `github-actions` app to bypass the rule,
+  or switch the workflow to a GitHub App token.
+- **If a build fails, no tag or release is created.** Fix the problem and run the workflow again with the
+  same inputs. Any `chore(release)` commit from the failed run is already on `main` and is simply reused.
+- **If `bump` fails** after a successful release, set the next version by hand:
+  `pnpm release:version set <next>`, commit, then push.
+- The helper can also be used locally:
+  - `pnpm release:version current`
+  - `pnpm release:version next minor`
+  - `pnpm release:version set 1.0.0`
+  - `pnpm release:version notes 0.1.0`
 
 ## Project metadata
 

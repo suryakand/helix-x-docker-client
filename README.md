@@ -94,8 +94,11 @@ pnpm --filter @helix/core test    # one package only
 pnpm dist:mac | dist:win | dist:linux
 ```
 
-Output goes to `apps/desktop/release/<version>/`. On Windows, use `scripts\build.ps1`. Signing,
-notarization and CI releases are covered in [docs/building.md](docs/building.md).
+Output goes to `apps/desktop/release/<version>/`. On Windows, use `scripts\build.ps1`.
+
+**Releases** are one click: **Actions → Release → Run workflow** on `main` builds all three platforms,
+publishes a GitHub Release with the installers, and bumps the version on `main`. Details, signing and
+notarization are covered in [docs/building.md](docs/building.md#releasing).
 
 ## Documentation
 

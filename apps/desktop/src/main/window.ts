@@ -1,6 +1,9 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, nativeTheme, shell } from 'electron'
 
+/** The app icon; electron-builder packs resources/icon.png into app.asar (and unpacks it). */
+export const ICON_PATH = join(__dirname, '../../resources/icon.png')
+
 export function createMainWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'
   const win = new BrowserWindow({
@@ -13,7 +16,8 @@ export function createMainWindow(): BrowserWindow {
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0f17' : '#f8fafc',
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: isMac ? { x: 14, y: 14 } : undefined,
-    icon: process.platform === 'linux' ? join(__dirname, '../../resources/icon.png') : undefined,
+    // macOS takes the icon from the bundle (or app.dock.setIcon in dev, see index.ts).
+    icon: isMac ? undefined : ICON_PATH,
     autoHideMenuBar: !isMac,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

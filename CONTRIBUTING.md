@@ -28,3 +28,6 @@ pnpm dev
   adapters, such as the `safeStorage` keychain, live in `apps/desktop/src/main/context.ts`.
 - **Before opening a PR:** run `pnpm check`. Also run `pnpm test:integration` if you touched the
   registry, docker or transfer code.
+- **Changelog and releases:** describe user-visible changes under `## Unreleased` in `CHANGELOG.md`.
+  Maintainers release with **Actions → Release → Run workflow** on `main`
+  (see [docs/building.md](docs/building.md#releasing)). It publishes the installers and bumps the version.
