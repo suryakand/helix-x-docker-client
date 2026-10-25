@@ -5,8 +5,8 @@
 // macOS/Windows, Colima, OrbStack, Rancher Desktop) keep DockerRootDir inside a VM disk image on the host.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
 import type { DockerStatus, DockerStorageInfo } from '@helix/shared/types'
+import { joinFor } from './endpoint'
 import type { EngineInfo } from './engine'
 
 export interface StorageEnv {
@@ -86,6 +86,7 @@ function pick(obj: Record<string, unknown> | undefined, keys: string[]): string 
 }
 
 function dockerDesktopMacDisk(e: StorageEnv): string[] {
+  const join = joinFor(e.platform)
   const groupDir = join(e.home, 'Library', 'Group Containers', 'group.com.docker')
   const settings =
     readJson(e, join(groupDir, 'settings-store.json')) ?? readJson(e, join(groupDir, 'settings.json'))
@@ -100,6 +101,7 @@ function dockerDesktopMacDisk(e: StorageEnv): string[] {
 }
 
 function dockerDesktopWindowsDisk(e: StorageEnv): string[] {
+  const join = joinFor(e.platform)
   const local = e.env.LOCALAPPDATA ?? join(e.home, 'AppData', 'Local')
   const roaming = e.env.APPDATA ?? join(e.home, 'AppData', 'Roaming')
   const settings =
@@ -123,6 +125,7 @@ function dockerDesktopWindowsDisk(e: StorageEnv): string[] {
 }
 
 function vmDiskCandidates(engine: Engine, e: StorageEnv, contextName?: string): string[] {
+  const join = joinFor(e.platform)
   switch (engine) {
     case 'Docker Desktop':
       if (e.platform === 'darwin') return dockerDesktopMacDisk(e)

@@ -65,7 +65,7 @@ describe('buildStorageInfo', () => {
   })
 
   it('uses the WSL2 vhdx on Windows', () => {
-    const vhdx = 'C:\\Users\\me\\AppData\\Local/Docker/wsl/disk/docker_data.vhdx'
+    const vhdx = 'C:\\Users\\me\\AppData\\Local\\Docker\\wsl\\disk\\docker_data.vhdx'
     const info = buildStorageInfo(
       connected('npipe:////./pipe/dockerDesktopLinuxEngine'),
       { OperatingSystem: 'Docker Desktop', DockerRootDir: '/var/lib/docker' },
@@ -77,7 +77,9 @@ describe('buildStorageInfo', () => {
       )
     )
     expect(info.engineName).toBe('Docker Desktop')
-    expect(info.vmDiskPath?.replace(/\\/g, '/')).toBe(vhdx.replace(/\\/g, '/'))
+    // Windows paths use backslashes whatever OS runs the code (CI runs this on macOS, Linux and Windows).
+    expect(info.vmDiskPath).toBe(vhdx)
+    expect(info.vmDiskExists).toBe(true)
   })
 
   it('detects the containerd image store', () => {

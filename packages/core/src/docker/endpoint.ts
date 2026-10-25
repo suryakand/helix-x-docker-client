@@ -3,7 +3,15 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { posix, win32 } from 'node:path'
+
+/**
+ * Paths are built for the platform being described (`e.platform`), not the host running this code, so the
+ * logic is the same everywhere (and tests that simulate macOS / Linux / Windows pass on any CI runner).
+ */
+export function joinFor(platform: NodeJS.Platform): (...parts: string[]) => string {
+  return platform === 'win32' ? win32.join : posix.join
+}
 
 export interface DockerEndpoint {
   /** Normalized URI: unix:///path, npipe:////./pipe/name, tcp://host:port */
@@ -30,15 +38,18 @@ const defaultEnv = (): EndpointEnv => ({
 })
 
 export function dockerConfigDir(e: EndpointEnv): string {
+  const join = joinFor(e.platform)
   return e.env.DOCKER_CONFIG || join(e.home, '.docker')
 }
 
 function tlsFromDir(dir: string, verify: boolean, e: EndpointEnv): DockerEndpoint['tls'] {
+  const join = joinFor(e.platform)
   const file = (n: string) => (e.exists(join(dir, n)) ? e.read(join(dir, n)) : undefined)
   return { ca: file('ca.pem'), cert: file('cert.pem'), key: file('key.pem'), verify }
 }
 
 export function currentContextName(e: EndpointEnv): string | undefined {
+  const join = joinFor(e.platform)
   if (e.env.DOCKER_CONTEXT) return e.env.DOCKER_CONTEXT
   try {
     const cfg = JSON.parse(e.read(join(dockerConfigDir(e), 'config.json'))) as { currentContext?: string }
@@ -49,6 +60,7 @@ export function currentContextName(e: EndpointEnv): string | undefined {
 }
 
 function fromContext(e: EndpointEnv): DockerEndpoint | undefined {
+  const join = joinFor(e.platform)
   const name = currentContextName(e)
   if (!name || name === 'default') return undefined
   const hash = createHash('sha256').update(name).digest('hex')
