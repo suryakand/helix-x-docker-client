@@ -23,6 +23,8 @@ jobs:
           restore-keys: turbo-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run typecheck lint test build
+      - name: Release tooling tests
+        run: pnpm test:scripts
       - name: Integration tests (registry:2 + Docker engine)
         run: pnpm test:integration
       - name: E2E (Electron under xvfb)

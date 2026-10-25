@@ -86,16 +86,9 @@ describe('resumable blob download', () => {
     dir = mkdtempSync(join(tmpdir(), 'resume-'))
   })
 
-  /** First request: send the first `cut` bytes, then kill the connection. */
-  function flaky(cut: number, honourRange: boolean): Handler {
-    let first = true
+  /** Serves the blob, answering Range requests with 206 when `honourRange` is set (otherwise 200 + full body). */
+  function rangeServer(honourRange: boolean): Handler {
     return (req, res) => {
-      if (first) {
-        first = false
-        res.writeHead(200, { 'content-length': BLOB.length })
-        res.write(BLOB.subarray(0, cut), () => setTimeout(() => res.destroy(), 20))
-        return
-      }
       const m = /bytes=(\d+)-/.exec(req.headers.range ?? '')
       if (m && honourRange) {
         const start = Number(m[1])
@@ -109,34 +102,63 @@ describe('resumable blob download', () => {
     }
   }
 
-  it('resumes from the bytes on disk with an HTTP Range request', async () => {
-    handler = flaky(100_000, true)
-    const store = new BlobStore(dir)
-    let progress = 0
-    await fetchBlob(client(), 'r', { digest: BLOB_DIGEST, size: BLOB.length }, store, {
+  /** A partial download left behind by an earlier, interrupted attempt. */
+  async function seedPartial(store: BlobStore, bytes: number) {
+    const partial = await store.resumable(BLOB_DIGEST)
+    await partial.append(Readable.from([BLOB.subarray(0, bytes)]))
+  }
+
+  const fetchInto = (store: BlobStore, progress: { add: (n: number) => void }) =>
+    fetchBlob(client(), 'r', { digest: BLOB_DIGEST, size: BLOB.length }, store, {
       signal: new AbortController().signal,
-      progress: { add: (n) => (progress += n) },
+      progress,
       retry: { baseDelayMs: 1 }
     })
+
+  it('resumes from the bytes on disk with an HTTP Range request', async () => {
+    handler = rangeServer(true)
+    const store = new BlobStore(dir)
+    await seedPartial(store, 100_000)
+    let progress = 0
+    await fetchInto(store, { add: (n) => (progress += n) })
     expect(store.has(BLOB_DIGEST, BLOB.length)).toBe(true)
     expect(progress).toBe(BLOB.length)
-    const second = log[1]
-    expect(second.range).toMatch(/^bytes=\d+-$/)
-    expect(Number(/\d+/.exec(second.range!)![0])).toBeGreaterThan(0)
+    expect(log).toHaveLength(1)
+    expect(log[0].range).toBe('bytes=100000-')
     rmSync(dir, { recursive: true, force: true })
   })
 
   it('starts over when the server ignores Range', async () => {
-    handler = flaky(100_000, false)
+    handler = rangeServer(false)
     const store = new BlobStore(dir)
+    await seedPartial(store, 100_000)
     let progress = 0
-    await fetchBlob(client(), 'r', { digest: BLOB_DIGEST, size: BLOB.length }, store, {
-      signal: new AbortController().signal,
-      progress: { add: (n) => (progress += n) },
-      retry: { baseDelayMs: 1 }
-    })
+    await fetchInto(store, { add: (n) => (progress += n) })
+    expect(log[0].range).toBe('bytes=100000-')
     expect(store.has(BLOB_DIGEST, BLOB.length)).toBe(true)
     expect(progress).toBe(BLOB.length)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('retries a download whose connection drops mid-stream', async () => {
+    // How many of the first bytes reach disk before the drop is timing dependent (chunks still queued in
+    // the response stream are discarded when it errors), so only the guaranteed outcome is asserted:
+    // the blob completes, verifies, and progress is counted exactly once.
+    let first = true
+    const serve = rangeServer(true)
+    handler = (req, res, body) => {
+      if (!first) return serve(req, res, body)
+      first = false
+      res.writeHead(200, { 'content-length': BLOB.length })
+      res.write(BLOB.subarray(0, 100_000), () => setTimeout(() => res.destroy(), 20))
+    }
+    const store = new BlobStore(dir)
+    let progress = 0
+    await fetchInto(store, { add: (n) => (progress += n) })
+    expect(log.length).toBeGreaterThanOrEqual(2)
+    expect(store.has(BLOB_DIGEST, BLOB.length)).toBe(true)
+    expect(progress).toBe(BLOB.length)
+    expect((await store.resumable(BLOB_DIGEST)).offset).toBe(0) // no leftover partial file
     rmSync(dir, { recursive: true, force: true })
   })
 
