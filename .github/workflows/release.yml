@@ -193,12 +193,33 @@ jobs:
           PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
         run: |
           set -euo pipefail
+          # Artifacts keep their folder layout (dist/<version>/…), so collect the installer files wherever they are.
+          mapfile -t files < <(find dist -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' \
+            -o -name '*.AppImage' -o -name '*.deb' -o -name '*.tar.gz' \) | sort)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No installers found in the build artifacts."
+            find dist -maxdepth 3
+            exit 1
+          fi
+          dupes=$(printf '%s\n' "${files[@]##*/}" | sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "::error::Two installers share a file name: ${dupes}"
+            exit 1
+          fi
+          printf 'Uploading %s\n' "${files[@]}"
+
+          # A draft left behind by an earlier failed run would otherwise become a duplicate release.
+          if [ "$(gh release view "v${VERSION}" --json isDraft --jq .isDraft 2>/dev/null || true)" = "true" ]; then
+            echo "Deleting the unfinished draft v${VERSION} from an earlier run"
+            gh release delete "v${VERSION}" --yes
+          fi
+
           node scripts/release-version.mjs notes "$VERSION" > notes.md
           if [ ! -s notes.md ]; then echo "Helix-X Docker Client ${VERSION}" > notes.md; fi
           if [ "$PRERELEASE" = "true" ]; then channel=--prerelease; else channel=--latest; fi
-          # The tag is created here, at the built commit, so a failed build never leaves a tag behind.
-          # --notes is prepended to GitHub's generated notes (commits / PRs since the previous release).
-          gh release create "v${VERSION}" dist/* \
+          # gh uploads the installers to a draft first and only publishes (creating the tag at the built commit)
+          # once every upload succeeded. --notes is prepended to GitHub's generated notes.
+          gh release create "v${VERSION}" "${files[@]}" \
             --target "$SHA" \
             --title "Helix-X Docker Client v${VERSION}" \
             --notes "$(cat notes.md)" \
@@ -210,8 +231,19 @@ jobs:
             echo
             echo "| Installer | Size |"
             echo "| --- | --- |"
-            for f in dist/*; do echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"; done
+            for f in "${files[@]}"; do echo "| ${f##*/} | $(du -h "$f" | cut -f1) |"; done
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove the unfinished draft release
+        # Only drafts are deleted: a release that was actually published is never touched.
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if [ "$(gh release view "v${VERSION}" --json isDraft --jq .isDraft 2>/dev/null || true)" = "true" ]; then
+            gh release delete "v${VERSION}" --yes && echo "Deleted the unfinished draft v${VERSION}"
+          fi
       - name: Update main with the release commit
         if: needs.prepare.outputs.staging != ''
         env:
