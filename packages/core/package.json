@@ -1,6 +1,6 @@
 {
   "name": "@helix/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Electron-free engine: credential vault, stores, registry client & providers, Docker engine client, transfers.",
   "exports": {

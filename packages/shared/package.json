@@ -1,6 +1,6 @@
 {
   "name": "@helix/shared",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Types, IPC contract, validation schemas and registry provider definitions shared by every layer.",
   "exports": {
