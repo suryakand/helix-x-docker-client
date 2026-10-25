@@ -1,0 +1,64 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "stream",
+  "globalDependencies": ["eslint.config.mjs", ".prettierrc.json"],
+  "tasks": {
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    "build": {
+      "dependsOn": ["transit"],
+      "outputs": ["out/**"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/docs/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["transit"]
+    },
+    "lint": {},
+    "test": {
+      "dependsOn": ["transit"],
+      "outputs": []
+    },
+    "test:integration": {
+      "dependsOn": ["transit"],
+      "cache": false
+    },
+    "test:e2e": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "start": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "persistent": true
+    },
+    "dist": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "dist:mac": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "dist:win": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "dist:linux": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "dist:all": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "dist:dir": {
+      "dependsOn": ["build"],
+      "cache": false
+    }
+  }
+}

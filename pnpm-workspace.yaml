@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm refuses unapproved dependency build scripts. electron-winstaller (Squirrel.Windows, pulled in by
+# electron-builder) is not used — Windows builds use NSIS — so its script stays disabled.
+# Electron itself has no install script: it downloads its binary on first launch.
+allowBuilds:
+  electron-winstaller: false

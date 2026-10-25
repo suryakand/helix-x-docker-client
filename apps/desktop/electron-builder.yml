@@ -1,0 +1,72 @@
+appId: io.helixx.dockerclient
+productName: Helix-X Docker Client
+copyright: Copyright © 2026 Helix-X
+directories:
+  output: release/${version}
+  buildResources: resources
+files:
+  - out/**
+  - resources/icon.png
+  - package.json
+  - '!**/*.{map,md,ts,tsx}'
+  - '!**/{test,tests,__tests__,docs,example,examples}/**'
+asarUnpack:
+  - resources/**
+extraMetadata:
+  main: out/main/index.js
+  # The workspace package is "@helix/desktop"; artifacts, the Linux executable and the .deb package
+  # need a plain name.
+  name: helix-x-docker-client
+artifactName: ${name}-${version}-${os}-${arch}.${ext}
+
+mac:
+  category: public.app-category.developer-tools
+  icon: resources/icon.png
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  # Signing uses CSC_LINK / CSC_KEY_PASSWORD (or a Developer ID in the keychain); notarization runs
+  # automatically when APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID are set. See docs/building.md.
+dmg:
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
+
+win:
+  icon: resources/icon.png
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: portable
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  artifactName: ${name}-${version}-win-${arch}-setup.${ext}
+portable:
+  artifactName: ${name}-${version}-win-${arch}-portable.${ext}
+
+linux:
+  icon: resources/icon.png
+  category: Development
+  maintainer: Helix-X <dev@helix-x.io>
+  synopsis: Desktop client for container registries and Docker
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+    - target: tar.gz
+      arch: [x64]
+deb:
+  depends: [libsecret-1-0, libnotify4, libxss1, libxtst6, libnss3]
+
+# Publishing is configured on the command line by .github/workflows/release.yml
+# (-c.publish.provider=github) so local builds never try to upload anything.
+publish: null

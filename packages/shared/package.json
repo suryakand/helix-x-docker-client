@@ -1,0 +1,23 @@
+{
+  "name": "@helix/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Types, IPC contract, validation schemas and registry provider definitions shared by every layer.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@helix/tsconfig": "workspace:*",
+    "@types/node": "^22.20.5",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "helix-x-docker-client",
+  "private": true,
+  "description": "Helix-X Docker Client — pnpm + Turborepo monorepo",
+  "packageManager": "pnpm@11.0.8",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev --filter=@helix/desktop",
+    "start": "turbo run start --filter=@helix/desktop",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "test:e2e": "turbo run test:e2e",
+    "check": "turbo run typecheck lint test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "icons": "pnpm --filter @helix/desktop icons",
+    "dist": "turbo run dist --filter=@helix/desktop",
+    "dist:mac": "turbo run dist:mac --filter=@helix/desktop",
+    "dist:win": "turbo run dist:win --filter=@helix/desktop",
+    "dist:linux": "turbo run dist:linux --filter=@helix/desktop",
+    "dist:all": "turbo run dist:all --filter=@helix/desktop",
+    "dist:dir": "turbo run dist:dir --filter=@helix/desktop",
+    "clean": "node scripts/clean.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "turbo": "^2.11.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}

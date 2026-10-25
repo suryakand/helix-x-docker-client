@@ -1,0 +1,13 @@
+node_modules/
+.turbo/
+out/
+dist/
+release/
+coverage/
+test-results/
+playwright-report/
+packages/core/tests/integration/.tmp/
+*.log
+.DS_Store
+.env
+*.timestamp-*.mjs
